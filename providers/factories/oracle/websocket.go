@@ -1,0 +1,126 @@
+package oracle
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+
+	"go.uber.org/zap"
+
+	"github.com/1119-Labs/slinky/oracle/config"
+	"github.com/1119-Labs/slinky/oracle/types"
+	apihandlers "github.com/1119-Labs/slinky/providers/base/api/handlers"
+	wshandlers "github.com/1119-Labs/slinky/providers/base/websocket/handlers"
+	wsmetrics "github.com/1119-Labs/slinky/providers/base/websocket/metrics"
+	"github.com/1119-Labs/slinky/providers/websockets/binance"
+	"github.com/1119-Labs/slinky/providers/websockets/bitfinex"
+	"github.com/1119-Labs/slinky/providers/websockets/bitstamp"
+	"github.com/1119-Labs/slinky/providers/websockets/bybit"
+	coinbasews "github.com/1119-Labs/slinky/providers/websockets/coinbase"
+	"github.com/1119-Labs/slinky/providers/websockets/cryptodotcom"
+	"github.com/1119-Labs/slinky/providers/websockets/gate"
+	"github.com/1119-Labs/slinky/providers/websockets/huobi"
+	"github.com/1119-Labs/slinky/providers/websockets/kraken"
+	"github.com/1119-Labs/slinky/providers/websockets/kucoin"
+	"github.com/1119-Labs/slinky/providers/websockets/mexc"
+	"github.com/1119-Labs/slinky/providers/websockets/okx"
+)
+
+// WebSocketQueryHandlerFactory returns a sample implementation of the websocket query handler
+// factory. Specifically, this factory function returns websocket query handlers that are used to
+// fetch data from the price providers.
+func WebSocketQueryHandlerFactory(
+	_ context.Context,
+	logger *zap.Logger,
+	cfg config.ProviderConfig,
+	wsMetrics wsmetrics.WebSocketMetrics,
+) (types.PriceWebSocketQueryHandler, error) {
+	err := cfg.ValidateBasic()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the underlying client that can be utilized by websocket providers that need to
+	// interact with an API.
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxConnsPerHost: cfg.API.MaxQueries,
+			Proxy:           http.ProxyFromEnvironment,
+		},
+		Timeout: cfg.API.Timeout,
+	}
+
+	var (
+		requestHandler apihandlers.RequestHandler
+		wsDataHandler  types.PriceWebSocketDataHandler
+		connHandler    wshandlers.WebSocketConnHandler
+	)
+
+	switch cfg.Name {
+	case binance.Name:
+		wsDataHandler, err = binance.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case bitfinex.Name:
+		wsDataHandler, err = bitfinex.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case bitstamp.Name:
+		wsDataHandler, err = bitstamp.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case bybit.Name:
+		wsDataHandler, err = bybit.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case coinbasews.Name:
+		wsDataHandler, err = coinbasews.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case cryptodotcom.Name:
+		wsDataHandler, err = cryptodotcom.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case gate.Name:
+		wsDataHandler, err = gate.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case huobi.Name:
+		wsDataHandler, err = huobi.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case kraken.Name:
+		wsDataHandler, err = kraken.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case kucoin.Name:
+		// Create the KuCoin websocket data handler.
+		wsDataHandler, err = kucoin.NewWebSocketDataHandler(logger, cfg.WebSocket)
+		if err != nil {
+			return nil, err
+		}
+
+		// The request handler requires POST requests when first establishing the connection.
+		requestHandler, err = apihandlers.NewRequestHandlerImpl(
+			client,
+			apihandlers.WithHTTPMethod(http.MethodPost),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create the KuCoin websocket connection handler.
+		connHandler, err = wshandlers.NewWebSocketHandlerImpl(
+			cfg.WebSocket,
+			wshandlers.WithPreDialHook(kucoin.PreDialHook(cfg.API, requestHandler)),
+		)
+	case mexc.Name:
+		wsDataHandler, err = mexc.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	case okx.Name:
+		wsDataHandler, err = okx.NewWebSocketDataHandler(logger, cfg.WebSocket)
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", cfg.Name)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// If a custom request handler is not provided, create a new default one.
+	if connHandler == nil {
+		connHandler, err = wshandlers.NewWebSocketHandlerImpl(cfg.WebSocket)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Create the websocket query handler which encapsulates all fetching and parsing logic.
+	return types.NewPriceWebSocketQueryHandler(
+		logger,
+		cfg.WebSocket,
+		wsDataHandler,
+		connHandler,
+		wsMetrics,
+	)
+}

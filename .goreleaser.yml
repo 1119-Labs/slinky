@@ -1,0 +1,37 @@
+---
+project_name: slinky
+
+release:
+  github:
+    owner: 1119-Labs
+    name: slinky
+  prerelease: true
+
+builds:
+  - main: 'cmd/slinky/main.go'
+    goos:
+    - 'linux'
+    - 'darwin'
+    binary: 'slinky'
+    id: 'slinky'
+    ldflags:
+      - "-X github.com/1119-Labs/slinky/cmd/build.Build={{.Version}}"
+archives:
+  - format: tar.gz
+    wrap_in_directory: true
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    files:
+      - README.md
+
+snapshot:
+  name_template: SNAPSHOT-{{ .Commit }}
+
+changelog:
+  skip: false
+  use: 'github'
+
+checksum:
+  disable: false

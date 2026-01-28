@@ -1,0 +1,88 @@
+run:
+  tests: true
+  timeout: 10m
+  allow-parallel-runners: true
+  concurrency: 4
+
+linters:
+  disable-all: true
+  enable:
+    # Check for pass []any as any in variadic func(...any).
+    - asasalint
+    - asciicheck
+    # Checks for dangerous unicode character sequences.
+    # Super rare but why not to be a bit paranoid?
+    - bidichk
+    - dogsled
+    # Check for two durations multiplied together.
+    - durationcheck
+    - goconst
+    - gocritic
+    - gofumpt
+    - gosec
+    - gosimple
+    - govet
+    - godot
+    - ineffassign
+    - misspell
+    - nakedret
+    - errorlint
+    - nolintlint
+    # Finds shadowing of Go's predeclared identifiers.
+    # I hear a lot of complaints from junior developers.
+    # But after some time they find it very useful.
+    - predeclared
+    # Finds slices that could potentially be pre-allocated.
+    # Small performance win + cleaner code.
+    - prealloc
+    # Lint your Prometheus metrics name.
+    - promlinter
+      # Checks that package variables are not reassigned.
+      # Super rare case but can catch bad things (like `io.EOF = nil`)
+    - reassign
+    - staticcheck
+    - revive
+    - stylecheck
+    - typecheck
+    - thelper
+    - tenv
+    - tparallel
+    - unconvert
+    - unused
+    # Detect the possibility to use variables/constants from stdlib.
+    - usestdlibvars
+    # Finds wasted assignment statements.
+    - wastedassign
+    # - errcheck
+
+issues:
+  exclude-rules:
+    - text: "Use of weak random number generator"
+      linters:
+        - gosec
+    - text: "Don't use ALL_CAPS in Go names"
+      linters:
+        - revive
+    - text: "ST1003:"
+      linters:
+        - stylecheck
+    # - text: "ST1016:"
+    #   linters:
+    #     - stylecheck
+    # - text: "leading space"
+    #   linters:
+    #     - nolintlint
+
+  max-issues-per-linter: 10000
+  max-same-issues: 10000
+
+linters-settings:
+  dogsled:
+    max-blank-identifiers: 3
+  maligned:
+    # print struct with more effective memory layout or not, false by default
+    suggest-new: true
+  nolintlint:
+    allow-unused: false
+    require-explanation: false
+    require-specific: false

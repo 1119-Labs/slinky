@@ -1,0 +1,132 @@
+networks:
+  oracle_network:
+    driver: bridge
+
+services:
+  market_generator:
+    build:
+      context: ../..
+      dockerfile: ./contrib/images/slinky.market.simulator.Dockerfile
+    entrypoint: [
+      "/usr/local/bin/scripts",
+      "--use-core=$USE_CORE_MARKETS",
+      "--use-raydium=$USE_RAYDIUM_MARKETS",
+      "--use-uniswapv3-base=$USE_UNISWAPV3_BASE_MARKETS",
+      "--use-coingecko=$USE_COINGECKO_MARKETS",
+      "--use-coinmarketcap=$USE_COINMARKETCAP_MARKETS",
+      "--use-osmosis=$USE_OSMOSIS_MARKETS",
+      "--use-polymarket=$USE_POLYMARKET_MARKETS",
+      "--temp-file=data/markets.json",
+    ]
+    environment:
+      - USE_CORE_MARKETS=${USE_CORE_MARKETS:-true}
+      - USE_RAYDIUM_MARKETS=${USE_RAYDIUM_MARKETS:-false}
+      - USE_UNISWAPV3_BASE_MARKETS=${USE_UNISWAPV3_BASE_MARKETS:-false}
+      - USE_COINGECKO_MARKETS=${USE_COINGECKO_MARKETS:-false}
+      - USE_COINMARKETCAP_MARKETS=${USE_COINMARKETCAP_MARKETS:-false}
+      - USE_OSMOSIS_MARKETS=${USE_OSMOSIS_MARKETS:-false}
+      - USE_POLYMARKET_MARKETS=${USE_POLYMARKET_MARKETS:-false}
+    volumes:
+      - markets_data:/data
+    networks:
+      - oracle_network
+    profiles:
+      - sidecar
+
+  oracle:
+    build:
+      context: ../..
+      dockerfile: ./contrib/images/slinky.sidecar.dev.Dockerfile
+    environment:
+      - SLINKY_CONFIG_UPDATEINTERVAL=${SLINKY_CONFIG_UPDATEINTERVAL:-250ms}
+    entrypoint: [
+      "slinky",
+      "--market-config-path", "/data/markets.json",
+      "--pprof-port", "6060",
+      "--run-pprof",
+    ]
+    ports:
+      - "8080:8080" # main oracle port
+      - "6060:6060" # pprof port
+      - "8002:8002" # metrics port
+    depends_on:
+      - market_generator
+    volumes:
+      - markets_data:/data
+    networks:
+      - oracle_network
+    profiles:
+      - sidecar
+
+  blockchain:
+    environment:
+      - USE_CORE_MARKETS=${USE_CORE_MARKETS:-true}
+      - USE_RAYDIUM_MARKETS=${USE_RAYDIUM_MARKETS:-false}
+      - USE_UNISWAPV3_BASE_MARKETS=${USE_UNISWAPV3_BASE_MARKETS:-false}
+      - USE_COINGECKO_MARKETS=${USE_COINGECKO_MARKETS:-false}
+      - USE_COINMARKETCAP_MARKETS=${USE_COINMARKETCAP_MARKETS:-false}
+      - USE_OSMOSIS_MARKETS=${USE_OSMOSIS_MARKETS:-false}
+    build:
+      context: ../..
+      dockerfile: ./contrib/images/slinky.local.Dockerfile
+    ports:
+      - "1317:1317" # used to query the blockchain
+      - "26655:26655"
+      - "26656:26656"
+      - "26657:26657"
+      - "26660:26660" # chain side metrics
+      - "7171:7171"
+      - "9090:9090"
+    networks:
+      - oracle_network
+    profiles:
+      - all
+
+  oracle_with_blockchain:
+    build:
+      context: ../..
+      dockerfile: ./contrib/images/slinky.sidecar.dev.Dockerfile
+    entrypoint: [
+      "slinky",
+      "--update-market-config-path", "/oracle/market.json",
+      "--market-map-endpoint", "blockchain:9090",
+      "--pprof-port", "6060",
+      "--run-pprof",
+    ]
+    ports:
+      - "6060:6060" # pprof
+      - "8002:8002" # metrics
+      - "8080:8080" # oracle api
+    networks:
+      - oracle_network
+    profiles:
+      - all
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - oracle_network
+    profiles:
+      - all
+      - sidecar
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../../grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - oracle_network
+    profiles:
+      - all
+      - sidecar
+
+volumes:
+  grafana_data:
+  markets_data:

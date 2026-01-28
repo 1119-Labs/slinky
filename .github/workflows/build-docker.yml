@@ -1,0 +1,88 @@
+name: Build Slinky Docker images and push Releases to GHCR
+on:
+  push:
+    paths-ignore:
+      - docs/**
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: slinky-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        image: [
+          {file: "slinky.base.Dockerfile", name: "slinky-base"},
+          {file: "slinky.sim.app.Dockerfile", name: "slinky-sim-app"},
+          {file: "slinky.local.Dockerfile", name: "slinky-local-app"},
+          {file: "slinky.sidecar.e2e.Dockerfile", name: "slinky-e2e-sidecar"},
+          {file: "slinky.sidecar.Dockerfile", name: "slinky-sidecar"},
+          {file: "slinky.market.simulator.Dockerfile", name: "slinky-market-simulator"},
+        ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out the PR commit head
+        uses: actions/checkout@v5
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Check out the repo
+        uses: actions/checkout@v5
+        if: github.event_name != 'pull_request'
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Compute tags
+        id: tags
+        run: |
+          TAGS="ghcr.io/1119-Labs/${{ matrix.image.name }}:latest"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            TAGS="$TAGS,ghcr.io/1119-Labs/${{ matrix.image.name }}:${VERSION}"
+          fi
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Show tags
+        run: |
+          echo "Tags: ${{ steps.tags.outputs.tags }}"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+          platforms: linux/amd64,linux/arm64
+          file: "./contrib/images/${{ matrix.image.file }}"
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,62 @@
+name: Multi-Arch Build for Go
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  multi-arch-build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+          - os: darwin
+            arch: arm64
+            runner: macos-15
+          - os: darwin
+            arch: arm64
+            runner: macos-26
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .go-version
+          check-latest: false
+
+      - name: Set environment variables
+        run: |
+          echo "GOOS=${{ matrix.os }}" >> $GITHUB_ENV
+          echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+
+      - name: Clear Go module cache dir
+        run: sudo rm -rf ~/go/pkg/mod
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build chain
+        run: |
+          make build-sim-app
+
+      - name: Build sidecar
+        run: |
+          make build

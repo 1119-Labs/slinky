@@ -1,0 +1,61 @@
+name: Tests
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - tests/**
+      - docs/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-tests
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - run: |
+          set -euo pipefail
+          GO_VERSION=$(awk '/^go / {print $2}' go.mod)
+          echo "$GO_VERSION" > expected
+          diff -u expected .go-version
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .go-version
+          check-latest: false
+
+      - name: Clear Go module cache dir
+        run: sudo rm -rf ~/go/pkg/mod
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Git Diff
+        uses: technote-space/get-diff-action@v6.1.2
+        id: git_diff
+        with:
+          PATTERNS: |
+            **/*.go
+            go.mod
+            go.sum
+
+      - name: Tests
+        if: env.GIT_DIFF
+        run: |
+          make test
