@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - run: |
           set -euo pipefail
           GO_VERSION=$(awk '/^go / {print $2}' go.mod)
