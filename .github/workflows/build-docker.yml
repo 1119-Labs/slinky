@@ -33,13 +33,13 @@ jobs:
 
     steps:
       - name: Check out the PR commit head
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         if: github.event_name == 'pull_request'
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check out the repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         if: github.event_name != 'pull_request'
 
       - name: Login to GHCR
