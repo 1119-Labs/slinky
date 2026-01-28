@@ -64,10 +64,10 @@ jobs:
       - name: Compute tags
         id: tags
         run: |
-          TAGS="ghcr.io/1119-Labs/${{ matrix.image.name }}:latest"
+          TAGS="ghcr.io/1119-labs/${{ matrix.image.name }}:latest"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
-            TAGS="$TAGS,ghcr.io/1119-Labs/${{ matrix.image.name }}:${VERSION}"
+            TAGS="$TAGS,ghcr.io/1119-labs/${{ matrix.image.name }}:${VERSION}"
           fi
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
