@@ -44,7 +44,7 @@ jobs:
       - name: Clear Go module cache dir
         run: sudo rm -rf ~/go/pkg/mod
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cache/go-build
